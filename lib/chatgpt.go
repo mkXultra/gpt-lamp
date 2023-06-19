@@ -136,8 +136,7 @@ func PostMessage(data Payload) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// req.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_API_KEY"))
-	req.Header.Set("Authorization", "Bearer "+"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")
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_API_KEY"))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
