@@ -111,16 +111,6 @@ func PostMessageStream(data Payload, f func(*bufio.Reader)) (*bufio.Reader, erro
 	reader := bufio.NewReader(resp.Body)
 	f(reader)
 
-	// fmt.Println("reader", reader)
-	// for {
-	// 	line, err := reader.ReadBytes('\n')
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-
-	// 	fmt.Printf("Received: %s", line)
-	// }
-
 	return reader, nil
 }
 
@@ -187,9 +177,9 @@ func HowToFix(lang string, errCode int, errMsg string, showLang string) {
 	fmt.Println(chatGPTResponse.Choices[0].Message.Content)
 }
 
-func HowToFixStream(lang string, errCode int, errMsg string, showLang string) {
+func HowToFixStream(lang string, errCode int, errMsg, stdMsg string, showLang string) {
 	data := Payload{
-		Model: "gpt-3.5-turbo",
+		Model: os.Getenv("GPT_MODEL"),
 		Messages: []Message{
 			{
 				Role: "system",
@@ -200,7 +190,7 @@ func HowToFixStream(lang string, errCode int, errMsg string, showLang string) {
 			{
 				Role: "user",
 				// Content: fmt.Sprintf("# error code\n%d\n # error message\n%s\n", errCode, errMsg),
-				Content: fmt.Sprintf(prompt.HOW_TO_FIX_MESSAGE, errCode, errMsg),
+				Content: fmt.Sprintf(prompt.HOW_TO_FIX_MESSAGE, errCode, errMsg, stdMsg),
 			},
 		},
 		Temperature: 0,
@@ -211,7 +201,7 @@ func HowToFixStream(lang string, errCode int, errMsg string, showLang string) {
 		for {
 			line, err := reader.ReadBytes('\n')
 			if err != nil {
-				log.Fatalln(err)
+				// end of stream
 				return
 			}
 			jsonData := strings.Replace(string(line), "data: ", "", 1)

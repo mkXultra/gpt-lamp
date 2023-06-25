@@ -1,11 +1,14 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -16,6 +19,17 @@ import (
 var currentDir string
 var chatGptSwitch bool
 
+// example config file
+// {
+// 	apiKey: "OPENAI_API_KEY",
+// }
+
+type Config struct {
+	ApiKey           string `json:"apiKey"`
+	DefaultGptSwitch bool   `json:"defaultGptSwitch"`
+	GptModel         string `json:"gptModel"`
+}
+
 func initShell() {
 
 	var err error
@@ -24,6 +38,91 @@ func initShell() {
 		log.Fatalf("error getting current directory: %v", err)
 	}
 	chatGptSwitch = false
+	apikey := os.Getenv("OPENAI_API_KEY")
+	var config Config
+	if apikey == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			panic(err)
+		}
+
+		confDirPath := filepath.Join(homeDir, ".gpt-lamp")
+		// Check if the directory exists, if not, create it
+		if _, err := os.Stat(confDirPath); os.IsNotExist(err) {
+			err := os.MkdirAll(confDirPath, 0755)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		// conf.jsonへのパスを作成
+		confPath := filepath.Join(homeDir, ".gpt-lamp", "conf.json")
+
+		// conf.jsonを読み込む
+		confData, err := ioutil.ReadFile(confPath)
+		if err != nil {
+			// Check if the file exists
+			_, err := os.Stat(confPath)
+			if os.IsNotExist(err) {
+				// If the file does not exist, create it with a default configuration
+				defaultConfig := Config{
+					ApiKey: "Your default API Key",
+				}
+				configBytes, err := json.Marshal(defaultConfig)
+				if err != nil {
+					panic(err)
+				}
+
+				// Write the default configuration to the file
+				err = ioutil.WriteFile(confPath, configBytes, 0644)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Println("Default configuration file created.")
+				return
+			} else if err != nil {
+				// If there was an error other than "file does not exist", panic
+				panic(err)
+			}
+		}
+
+		// JSONを構造体にデコード
+		if err := json.Unmarshal(confData, &config); err != nil {
+			panic(err)
+		}
+		os.Setenv("OPENAI_API_KEY", config.ApiKey)
+		os.Setenv("GPT_MODEL", config.GptModel)
+		if config.DefaultGptSwitch {
+			chatGptSwitch = true
+		}
+	}
+	fmt.Println("apikey is set to:", os.Getenv("OPENAI_API_KEY"))
+	fmt.Println("gpt model:", os.Getenv("GPT_MODEL"))
+	fmt.Println("gptswitch", chatGptSwitch)
+
+}
+
+type Queue struct {
+	lines []string
+	max   int
+}
+
+func NewQueue(max int) *Queue {
+	return &Queue{
+		lines: make([]string, 0, max),
+		max:   max,
+	}
+}
+
+func (q *Queue) Add(line string) {
+	q.lines = append(q.lines, line)
+	if len(q.lines) > q.max {
+		q.lines = q.lines[1:]
+	}
+}
+
+func (q *Queue) Get() []string {
+	return q.lines
 }
 
 func executor(in string) {
@@ -52,20 +151,62 @@ func executor(in string) {
 			return
 		}
 	} else {
-		var stderr bytes.Buffer
+		// var stderr bytes.Buffer
+		// var stdout bytes.Buffer
 		cmd := exec.Command("bash", "-c", in)
-		cmd.Stderr = &stderr
-		cmd.Stdout = os.Stdout
+		// cmd.Stderr = &stderr
+		stderr, _ := cmd.StderrPipe()
+		// cmd.Stdout = &stdout
+		stdout, _ := cmd.StdoutPipe()
 		cmd.Dir = currentDir
-		err := cmd.Run()
+		cmd.Start()
+		// err := cmd.Run()
+		outQueue := NewQueue(30) // stdoutの最新の10行を保持
+		errQueue := NewQueue(10) // stderrの最新の10行を保持
+
+		// stdoutの処理
+		go func() {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				fmt.Println(line)  // 行を表示
+				outQueue.Add(line) // 行をキューに追加
+			}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintln(os.Stderr, "reading standard output:", err)
+			}
+		}()
+
+		// stderrの処理
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				fmt.Fprintln(os.Stderr, line) // エラーメッセージを表示
+				errQueue.Add(line)            // エラーメッセージをキューに追加
+			}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintln(os.Stderr, "reading standard error:", err)
+			}
+		}()
+
+		err := cmd.Wait()
 		if err != nil {
-			fmt.Println(stderr.String())
+			errMsgLines := errQueue.Get()
+			errMsgs := strings.Join(errMsgLines, "\n")
+			outMsgLines := outQueue.Get()
+			outMsgs := strings.Join(outMsgLines, "\n")
+
+			fmt.Println("---------error------------")
+			fmt.Println(errMsgs)
+			fmt.Println("---------stdout------------")
+			fmt.Println(outMsgs)
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 					if chatGptSwitch {
 						fmt.Println("Error thinking gpt")
 						// lib.HowToFix("go", status.ExitStatus(), stderr.String(), "JP")
-						lib.HowToFixStream("go", status.ExitStatus(), stderr.String(), "JP")
+						lib.HowToFixStream("go", status.ExitStatus(), errMsgs, outMsgs, "JP")
 					}
 				}
 			} else {
