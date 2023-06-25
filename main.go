@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,6 +16,8 @@ import (
 	"github.com/c-bata/go-prompt"
 	"github.com/mkXultra/gpt-lamp/lib"
 )
+
+const version = "0.0.1"
 
 var currentDir string
 var chatGptSwitch bool
@@ -66,9 +69,11 @@ func initShell() {
 			if os.IsNotExist(err) {
 				// If the file does not exist, create it with a default configuration
 				defaultConfig := Config{
-					ApiKey: "Your default API Key",
+					ApiKey:           "Your default API Key",
+					DefaultGptSwitch: true,
+					GptModel:         "gpt-3.5-turbo",
 				}
-				configBytes, err := json.Marshal(defaultConfig)
+				configBytes, err := json.MarshalIndent(defaultConfig, "", "  ")
 				if err != nil {
 					panic(err)
 				}
@@ -226,6 +231,28 @@ func completer(in prompt.Document) []prompt.Suggest {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		fmt.Println("\t-version\n\t\tprint version information")
+		fmt.Println("\tinit\n\t\tinitialize the gpt-lamp")
+		flag.PrintDefaults()
+	}
+	var cmdversion = flag.Bool("version", false, "print version information")
+	fmt.Println("gpt-lamp version", version)
+	flag.Parse()
+	if *cmdversion {
+		fmt.Sprintf("Version %s", version)
+		os.Exit(0)
+	}
+	if len(flag.Args()) > 0 {
+		switch flag.Arg(0) {
+		case "init":
+			fmt.Println("Initialization...")
+			initShell()
+			os.Exit(0)
+		}
+	}
+
 	initShell()
 
 	p := prompt.New(
