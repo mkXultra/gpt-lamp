@@ -177,7 +177,7 @@ func HowToFix(lang string, errCode int, errMsg string, showLang string) {
 	fmt.Println(chatGPTResponse.Choices[0].Message.Content)
 }
 
-func HowToFixStream(lang string, errCode int, errMsg, stdMsg string, showLang string) {
+func HowToFixStream(lang, exec string, errCode int, errMsg, stdMsg string, showLang string) {
 	data := Payload{
 		Model: os.Getenv("GPT_MODEL"),
 		Messages: []Message{
@@ -190,7 +190,7 @@ func HowToFixStream(lang string, errCode int, errMsg, stdMsg string, showLang st
 			{
 				Role: "user",
 				// Content: fmt.Sprintf("# error code\n%d\n # error message\n%s\n", errCode, errMsg),
-				Content: fmt.Sprintf(prompt.HOW_TO_FIX_MESSAGE, errCode, errMsg, stdMsg),
+				Content: fmt.Sprintf(prompt.HOW_TO_FIX_MESSAGE, exec, errCode, errMsg, stdMsg),
 			},
 		},
 		Temperature: 0,

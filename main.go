@@ -101,7 +101,7 @@ func initShell() {
 			chatGptSwitch = true
 		}
 	}
-	fmt.Println("apikey is set to:", os.Getenv("OPENAI_API_KEY"))
+	// fmt.Println("apikey is set to:", os.Getenv("OPENAI_API_KEY"))
 	fmt.Println("gpt model:", os.Getenv("GPT_MODEL"))
 	fmt.Println("gptswitch", chatGptSwitch)
 
@@ -211,7 +211,7 @@ func executor(in string) {
 					if chatGptSwitch {
 						fmt.Println("Error thinking gpt")
 						// lib.HowToFix("go", status.ExitStatus(), stderr.String(), "JP")
-						lib.HowToFixStream("go", status.ExitStatus(), errMsgs, outMsgs, "JP")
+						lib.HowToFixStream("go", in, status.ExitStatus(), errMsgs, outMsgs, "JP")
 					}
 				}
 			} else {
